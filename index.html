@@ -1,0 +1,473 @@
+<html>
+  <head>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link
+          href="https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap"
+          rel="stylesheet">
+  </head>
+  <body>
+    <div id="minesweeper_game">
+    <h5 class="mimesweeper_text">You need to find 10 mines</h5>
+    <div id="board"></div>
+    <button id="mimesweeper_restart_btn" onclick="restartGame()">Restart</button>
+
+    <!-- WIN MODAL -->
+    <div id="modal_overlay" onclick="onModalOverlayClick()"></div>
+    <div id="win_modal"></div>
+    <div id="lose_modal"></div>
+    <audio id="win_sound" src="/sounds/win_audio.wav"></audio>
+    <audio id="lose_sound" src="/sounds/lose_audio.wav"></audio>
+</div>
+<style>
+    #modal_overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 100;
+        display: none;
+    }
+
+    #win_modal{
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        height: 200px;
+        background-color: white;
+        border-radius: 5px;
+        display: none;
+        z-index: 101;
+
+        background-image: url('/images/you_win.jpg');
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-position: center;
+    }
+
+    #lose_modal{
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        height: 200px;
+        background-color: white;
+        border-radius: 5px;
+        display: none;
+        z-index: 101;
+
+        background-image: url('/images/you_lose.png');
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-position: center;
+    }
+
+    .minesweeper_text {
+        font-family: 'Black Ops One', cursive;
+        font-size: 20px;
+        margin-bottom: 0.5em;
+    }
+
+    #minesweeper_game {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #board {
+        width: 450px;
+        height: 450px;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        flex-direction: row;
+    }
+
+    #mimesweeper_restart_btn {
+        width: 100px;
+        height: 50px;
+        font-family: 'Black Ops One', cursive;
+        font-size: 20px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        justify-self: center;
+        margin-top: 1em;
+    }
+
+    @media (max-width: 450px) {
+        #board {
+            width: 300px;
+            height: 300px;
+        }
+    }
+
+    @media (max-width: 600px) {
+        #board {
+            width: 400px;
+            height: 400px;
+        }
+    }
+
+</style>
+<script>
+    const imageCover = '/images/minesweeper_cover.png'
+    const imageCoverFlagged = '/images/minesweeper_cover_flagged.png'
+    const imageBomb = '/images/minesweeper_bomb.jpg'
+    const boardViz = document.getElementById('board');
+    const board = [];
+    const ROWS = 9;
+    const COLS = 9;
+    let isGameOver = false;
+    let isWin = false;
+    let numFlagged = 0;
+
+    function playWinAudio(){
+        const winAudio = document.getElementById('win_sound')
+        winAudio.play()
+    }
+
+    function playLoseAudio(){
+        const loseAudio = document.getElementById('lose_sound')
+        loseAudio.play()
+    }
+
+    function openLoseModal(){
+        const modalOverlay = document.getElementById('modal_overlay')
+        const loseModal = document.getElementById('lose_modal')
+        modalOverlay.style.display = 'block'
+        loseModal.style.display = 'block'
+
+        playLoseAudio()
+    }
+
+    function openWinModal(){
+        const modalOverlay = document.getElementById('modal_overlay')
+        const winModal = document.getElementById('win_modal')
+        modalOverlay.style.display = 'block'
+        winModal.style.display = 'block'
+
+        playWinAudio()
+    }
+
+    function closeLoseModal(){
+        const modalOverlay = document.getElementById('modal_overlay')
+        const loseModal = document.getElementById('lose_modal')
+        modalOverlay.style.display = 'none'
+        loseModal.style.display = 'none'
+    }
+
+    function closeWinModal(){
+        const modalOverlay = document.getElementById('modal_overlay')
+        const winModal = document.getElementById('win_modal')
+        modalOverlay.style.display = 'none'
+        winModal.style.display = 'none'
+    }
+
+    function onModalOverlayClick(){
+        closeLoseModal()
+        closeWinModal()
+    }
+
+    function restartGame() {
+        history.go(0)
+    }
+
+    /**
+     * Compute cell size back from the board size
+     */
+    function computeCellSize(){
+        let boardWidth = boardViz.offsetWidth
+        let boardHeight = boardViz.offsetHeight
+        let cellSize = Math.min(boardWidth, boardHeight) / ROWS
+        return cellSize
+    }
+
+    function isWinNow(){
+        if(numFlagged !== 10) return false;
+
+        // If all bombs are flagged
+        for(let i = 0; i < ROWS; i++){
+            for(let j = 0; j < COLS; j++){
+                if(board[i][j].isBomb && !board[i][j].isFlagged){
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+
+    function initializeBoard(){
+        for(let i = 0; i < ROWS; i++){
+            board.push([])
+            for(let j = 0; j < COLS; j++){
+                board[i].push({
+                    isBomb: false,
+                    isCovered: true,
+                    isFlagged: false,
+                    neighborBombs: 0
+                })
+            }
+        }
+
+        for(let i = 0; i < ROWS; i++){
+            let x = Math.floor(Math.random() * ROWS)
+            let y = Math.floor(Math.random() * COLS)
+            if(board[x][y].isBomb){
+                i--
+            } else {
+                board[x][y].isBomb = true
+            }
+        }
+
+        for(let i = 0; i < ROWS; i++){
+            for(let j = 0; j < COLS; j++){
+                if(board[i][j].isBomb){
+                    // Top
+                    if(i - 1 >= 0){
+                        board[i-1][j].neighborBombs++
+                    }
+
+                    // Bottom
+                    if(i + 1 < ROWS){
+                        board[i+1][j].neighborBombs++
+                    }
+
+                    // Left
+                    if(j - 1 >= 0){
+                        board[i][j-1].neighborBombs++
+                    }
+
+                    // Right
+                    if(j + 1 < COLS){
+                        board[i][j+1].neighborBombs++
+                    }
+
+                    // Top left
+                    if(i - 1 >= 0 && j - 1 >= 0){
+                        board[i-1][j-1].neighborBombs++
+                    }
+
+                    // Top right
+                    if(i - 1 >= 0 && j + 1 < COLS){
+                        board[i-1][j+1].neighborBombs++
+                    }
+
+                    // Bottom left
+                    if(i + 1 < ROWS && j - 1 >= 0){
+                        board[i+1][j-1].neighborBombs++
+                    }
+
+                    // Bottom right
+                    if(i + 1 < ROWS && j + 1 < COLS){
+                        board[i+1][j+1].neighborBombs++
+                    }
+                }
+            }
+        }
+    }
+
+    function getColorByNumber(num) {
+        switch(num) {
+            case 1:
+                return 'blue'
+            case 2:
+                return 'green'
+            case 3:
+                return 'red'
+            case 4:
+                return 'purple'
+            case 5:
+                return 'maroon'
+            case 6:
+                return 'turquoise'
+            case 7:
+                return 'black'
+            case 8:
+                return 'gray'
+            default:
+                return 'black'
+        }
+    }
+
+    const cellSize = computeCellSize()
+
+    function makeNumberCell(row, col){
+        const cell = document.getElementById(`${row}-${col}`)
+        cell.firstChild.style.backgroundImage = ''
+        cell.firstChild.style.backgroundColor = 'rgba(211, 208, 208, 1)'
+        cell.firstChild.style.border = '1px solid black'
+
+        // Add number
+        const number = document.createElement('span')
+        number.innerText = board[row][col].neighborBombs > 0 ? board[row][col].neighborBombs : ''
+        number.style.color = getColorByNumber(board[row][col].neighborBombs)
+        number.style.fontWeight = 'bold'
+        number.style.fontSize = '20px'
+
+        if (!cell.firstChild.hasChildNodes()) {
+            cell.firstChild.appendChild(number)
+        }
+    }
+
+    function floodFill(row, col) {
+        if(row < 0 || row >= ROWS) return;
+        if(col < 0 || col >= COLS) return;
+
+
+
+        const cell = board[row][col]
+        
+        const isCellCanReveal = cell.isCovered && !cell.isBomb && !cell.isFlagged && cell.neighborBombs === 0
+
+        if(isCellCanReveal) {
+            cell.isCovered = false
+            makeNumberCell(row, col)
+            board[row][col] = cell
+
+            floodFill(row - 1, col)
+            floodFill(row + 1, col)
+            floodFill(row, col - 1)
+            floodFill(row, col + 1)
+        } else if(cell.neighborBombs > 0) {
+            cell.isCovered = false
+            makeNumberCell(row, col)
+            board[row][col] = cell
+        }
+    }
+
+    function flagCell(row, col) {
+        if(isGameOver) return;
+        if(isWin) return;
+
+        const cell = board[row][col]
+
+        if(!cell.isCovered) return;
+
+        const flagState = !cell.isFlagged
+        cell.isFlagged = flagState
+
+        if (flagState) {
+            cell.isCovered = true
+            cell.isFlagged = true
+            const cellElement = document.getElementById(`${row}-${col}`)
+            cellElement.firstChild.style.backgroundImage = `url(${imageCoverFlagged})`
+            cellElement.firstChild.style.backgroundSize = 'cover'
+            cellElement.firstChild.style.backgroundRepeat = 'no-repeat'
+            cellElement.firstChild.style.backgroundPosition = 'center'
+
+            numFlagged++
+
+            if(isWinNow()){
+                openWinModal()
+                isWin = true
+            }
+        } else {
+            cell.isCovered = true
+            cell.isFlagged = false
+            const cellElement = document.getElementById(`${row}-${col}`)
+            cellElement.firstChild.style.backgroundImage = `url(${imageCover})`
+            cellElement.firstChild.style.backgroundSize = 'cover'
+            cellElement.firstChild.style.backgroundRepeat = 'no-repeat'
+            cellElement.firstChild.style.backgroundPosition = 'center'
+
+            numFlagged--
+        }
+
+        board[row][col] = cell
+    }
+
+    /**
+     * Reveal a cell, using flood fill
+     * @param row
+     * @param col
+     */
+    function revealCell(row, col) {
+        if(isGameOver) return;
+        if(isWin) return;
+
+        const cell = board[row][col]
+        if(cell.isFlagged){
+            return
+        }
+
+        if(cell.isCovered === false) {
+            return
+        }
+
+        if(cell.isBomb) {
+            // Reveal all bombs
+            const cellEl = document.getElementById(`${row}-${col}`)
+            cellEl.firstChild.style.backgroundImage = `url(${imageBomb})`
+            cellEl.firstChild.style.backgroundSize = 'cover'
+            cellEl.firstChild.style.backgroundRepeat = 'no-repeat'
+            cellEl.firstChild.style.backgroundPosition = 'center'
+            cellEl.firstChild.style.border = '1px solid black'
+
+            //
+            openLoseModal()
+
+            isGameOver = true
+        }
+
+        if(isGameOver !== true){
+            if(cell.neighborBombs === 0) {
+                floodFill(row, col)
+            } else {
+                cell.isCovered = false
+                makeNumberCell(row, col)
+                board[row][col] = cell
+            }
+        }
+    }
+
+    function drawInitialBoard(){
+        for(let i = 0 ; i < ROWS; i++){
+            for(let j = 0 ; j< COLS; j++){
+                let cell = document.createElement('div')
+                cell.setAttribute('id', `${i}-${j}`)
+                cell.setAttribute('class', 'cell')
+
+                const cellImage = document.createElement('div')
+                cellImage.setAttribute('onclick', `revealCell(${i}, ${j})`)
+                // Ignore right click
+                cellImage.addEventListener('contextmenu', (e)=>{
+                    e.preventDefault()
+                    flagCell(i, j)
+                });
+                cellImage.style.backgroundImage = `url(${imageCover})`
+                cellImage.style.backgroundSize = 'cover'
+                cellImage.style.backgroundRepeat = 'no-repeat'
+                cellImage.style.backgroundPosition = 'center'
+                cellImage.style.width = cellSize + 'px'
+                cellImage.style.height = cellSize + 'px'
+                cellImage.style.display = 'flex'
+                cellImage.style.justifyContent = 'center'
+                cellImage.style.alignItems = 'center'
+                cell.appendChild(cellImage)
+                boardViz.appendChild(cell)
+            }
+        }
+    }
+
+    function main(){
+        initializeBoard()
+        drawInitialBoard()
+    }
+
+    main()
+
+</script>
+  </body>
+</html>
